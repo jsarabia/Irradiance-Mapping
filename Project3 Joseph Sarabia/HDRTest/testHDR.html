@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HDR Image Reading Demo</title>
+    <script src="webgl-utils.js"></script>
+    <script src="webgl-debug.js"></script>
+    <script src="cuon-utils.js"></script>
+    <script src="HDRreader.js"></script>
+	<script>
+	
+	function addMessage(m){
+		console.log(m);
+	}
+	function main()
+	{
+		// Retrieve <canvas> element
+		var canvas = document.getElementById('myCanvas'); 
+			  // 'mycanvas" is the id that you assigned to the canvas element in your html page.
+		if (!canvas){
+			addMessage("No Canvas with id myCanvas could be located.");
+		}
+		else addMessage("Canvas is acquired");
+
+		// Get the rendering context for WebGL
+		var gl = getWebGLContext(canvas);
+		if (!gl) {
+			addMessage('Failed to get the rendering context for WebGL');
+			return;
+		}
+		else addMessage('Rendering context for WebGL acquired.');
+		gl.clearColor(0,0,0,1);	
+
+		if (!gl.getExtension("OES_texture_float")) {
+			alert("This project requires the OES_texture_float extension. Must use a different hardware.");
+			return;
+		}
+		  // Vertex shader program
+		var VSHADER_SOURCE =
+		  'attribute vec3 position;\n' +
+		  'attribute vec2 texCoord;\n' +
+		  'varying vec2 tCoord;\n'+
+		  'void main() {\n' +
+		  '  gl_Position = vec4(position,1.0);\n' +
+		  '	 tCoord = texCoord;\n'+
+		  '}\n';
+
+		// Fragment shader program
+		var FSHADER_SOURCE =
+		  'precision mediump float;\n'+
+		  'uniform sampler2D tex;\n'+
+		  'varying vec2 tCoord;\n'+
+		  'void main() {\n' +
+		  '  vec3 color = texture2D(tex, tCoord).rgb;\n'+
+		  '  gl_FragColor = vec4(color,1.0);\n' +
+		  //'  gl_FragColor = vec4(1.0,0.0,1.0,1.0);\n' +
+		  '}\n';
+
+		  // Create the Program from the shader code.
+		var program = createProgram(gl, VSHADER_SOURCE, FSHADER_SOURCE);
+		if (!program) {
+			addMessage('Failed to create program');
+			return false;
+		}
+		else addMessage('Shader Program was successfully created.');
+
+		// Get the location/address of the vertex attribute inside the shader program.
+		var a_Position = gl.getAttribLocation(program, 'position');	  
+		var a_TexCoord = gl.getAttribLocation(program, 'texCoord');	  
+		// Enable the assignment to a_Position variable
+		gl.enableVertexAttribArray(a_Position); 
+		gl.enableVertexAttribArray(a_TexCoord); 
+		var samplerLoc = gl.getUniformLocation(program, 'tex');
+		gl.useProgram(program);
+		function Drawable(attributes, nVertices){
+		  // Create a buffer object
+		  var attribBuffers=[];
+		  for (var i=0; i<attributes.length; i++){
+			  attribBuffers[i] = gl.createBuffer();
+			  if (!attribBuffers[i]) {
+				addMessage('Failed to create the buffer object');
+				return null;
+			  }
+			  // Bind the buffer object to an ARRAY_BUFFER target
+			  gl.bindBuffer(gl.ARRAY_BUFFER, attribBuffers[i]);
+			  // Write date into the buffer object
+			  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(attributes[i]), gl.STATIC_DRAW);
+		  }
+		  this.draw = function (attribLocations){
+			for (var i=0; i<attributes.length; i++){
+				  // Bind the buffer object to target
+				  gl.bindBuffer(gl.ARRAY_BUFFER, attribBuffers[i]);
+				  // Assign the buffer object to a_Position variable
+				  gl.vertexAttribPointer(attribLocations[i], 2, gl.FLOAT, false, 0, 0);
+			}
+				  
+			gl.drawArrays(gl.TRIANGLE_FAN, 0, nVertices);
+		  }
+		}
+		var quad = new Drawable([[-1,-1, 1, -1, 1, 1, -1, 1],[0,0, 1, 0, 1, 1, 0, 1]],4); 
+
+		function createHDRtexture(img)
+		{
+			var tex = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D,tex);
+			gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB, img.width, img.height, 0, gl.RGB, gl.FLOAT, img.data);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.bindTexture(gl.TEXTURE_2D, null);	
+			return tex;
+		}
+		var hdr=new HDRimage();
+		var probeImg = hdr.readFile("stpeters_probe.hdr",true);
+		var tex=null;
+		function draw()
+		{
+			if (!probeImg.data.length){
+				console.log("data not ready");
+				window.requestAnimationFrame(draw);			
+			}
+			else {
+				if (!tex) tex = createHDRtexture(probeImg); 
+				gl.clear(gl.COLOR_BUFFER_BIT);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D,tex);
+				gl.uniform1i(samplerLoc,0);
+
+				quad.draw([a_Position,a_TexCoord]);
+			}
+			
+		}
+		draw();
+	}
+	</script>
+ </head>
+
+  <body onload="main()">
+	You are looking at a hdr file '"stpeters_probe.hdr".<br>
+	For more HDR files  visit <a href='http://www.pauldebevec.com/Probes/'>http://www.pauldebevec.com/Probes/</a>.<br>
+    <canvas id="myCanvas" width="400" height="400"></canvas>
+ </body>
+</html>
+
